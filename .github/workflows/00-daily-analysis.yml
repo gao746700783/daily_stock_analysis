@@ -1,42 +1,42 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
-  schedule:
-    - cron: '0 10 * * 1-5'     # 周一到周五，UTC 10:00 = 北京时间 18:00
-  
-  # 手动触发
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: '运行模式'
-        required: true
-        default: 'full'
-        type: choice
-        options:
-          - full          # 完整分析（股票+大盘）
-          - market-only   # 仅大盘复盘
-          - stocks-only   # 仅股票分析
-      force_run:
-        description: '强制运行（跳过交易日检查）'
-        required: false
-        default: false
-        type: boolean
+# 定时触发 - 每天北京时间 18:00 (UTC 10:00)
+schedule:
+- cron: '0 10 * * 1-5'     # 周一到周五，UTC 10:00 = 北京时间 18:00
+
+# 手动触发
+workflow_dispatch:
+inputs:
+mode:
+description: '运行模式'
+required: true
+default: 'full'
+type: choice
+options:
+- full          # 完整分析（股票+大盘）
+- market-only   # 仅大盘复盘
+- stocks-only   # 仅股票分析
+force_run:
+description: '强制运行（跳过交易日检查）'
+required: false
+default: false
+type: boolean
 
 # 并发控制：同一时间只运行一个分析任务
 concurrency:
-  group: stock-analysis
-  cancel-in-progress: false
+group: stock-analysis
+cancel-in-progress: false
 
 jobs:
-  analyze:
-    runs-on: ubuntu-latest
-    # 兼容误将 STOCK_LIST 配到同名 Environment variables 的场景；
-    # 推荐位置仍是 Settings -> Secrets and variables -> Actions -> Repository variables。
-    environment: STOCK_LIST
-    # 添加超时限制，防止任务卡死
-    timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
-    
+analyze:
+runs-on: ubuntu-latest
+# 兼容误将 STOCK_LIST 配到同名 Environment variables 的场景；
+# 推荐位置仍是 Settings -> Secrets and variables -> Actions -> Repository variables。
+environment: STOCK_LIST
+# 添加超时限制，防止任务卡死
+timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
+
     steps:
       - name: 随机延迟（避免固定时间访问）
         run: sleep $((RANDOM % 60))  # 随机延迟0-60秒启动
@@ -548,6 +548,48 @@ jobs:
           else
             python main.py $FORCE_RUN_ARG
           fi
+
+      - name: 免费推送报告至QQ官方机器人
+        if: success() # 仅在前面股票分析成功时才触发
+        env:
+           QQ_APPID: ${{ secrets.QQ_BOT_APPID }}
+           QQ_SECRET: ${{ secrets.QQ_BOT_SECRET }}
+           QQ_TARGET: ${{ secrets.QQ_TARGET_ID }}
+        run: |
+           echo "正在获取 QQ 官方 AccessToken..."
+           # 1. 向腾讯服务器用 AppID 和 Secret 换取临时 Token
+           TOKEN_RES=$(curl -s -X POST "https://qq.com" \
+             -H "Content-Type: application/json" \
+             -d "{\"appId\":\"$QQ_APPID\",\"clientSecret\":\"$QQ_SECRET\"}")
+           
+           ACCESS_TOKEN=$(echo $TOKEN_RES | jq -r '.access_token')
+           
+           if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+             echo "❌ 错误：无法获取 QQ AccessToken，请检查 AppID 和 Secret 是否正确！"
+             exit 1
+           fi
+   
+           echo "正在提取今日生成的股票分析报告..."
+           # 2. 捞取项目在 reports/ 目录下生成的最新文本/Markdown 报告
+           # 如果找不到则采用兜底提示文本
+           REPORT_PATH=$(ls -t reports/*.txt 2>/dev/null | head -n 1)
+           if [ -z "$REPORT_PATH" ]; then
+             REPORT_CONTENT="📈 今日自选股分析已跑完！具体详情请登录 GitHub 仓库查看导出的 artifact 看板。"
+           else
+             # 【核心避坑】QQ官方接口单条消息硬性限制1024字符，此处强行截取前900个字符防止报错
+             REPORT_CONTENT=$(head -c 900 "$REPORT_PATH")
+           fi
+   
+           echo "正在通过 OpenAPI 推送至 QQ 群..."
+           # 3. 使用安全的方式包装 JSON，并调用 QQ 官方机器人 OpenAPI v3 接口发送群消息
+           curl -X POST "https://qq.com" \
+             -H "Authorization: QQBot $ACCESS_TOKEN" \
+             -H "X-Union-Appid: $QQ_APPID" \
+             -H "Content-Type: application/json" \
+             -d "$(jq -n --arg content "$REPORT_CONTENT" '{content: $content, msg_type: 0}')"
+           
+           echo "✅ QQ 机器人推送尝试完成！"
+
       
       - name: 上传分析报告
         uses: actions/upload-artifact@v6
