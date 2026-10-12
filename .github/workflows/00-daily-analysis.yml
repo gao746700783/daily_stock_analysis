@@ -548,8 +548,9 @@ timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
           else
             python main.py $FORCE_RUN_ARG
           fi
-
-      - name: 免费推送报告至QQ官方机器人
+      
+          # === 在“上传分析报告”步骤之前插入以下代码 ===
+      - name: 免费推送报告至 QQ 官方机器人
         if: success() # 仅在前面股票分析成功时才触发
         env:
            QQ_APPID: ${{ secrets.QQ_BOT_APPID }}
@@ -590,7 +591,6 @@ timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
            
            echo "✅ QQ 机器人推送尝试完成！"
 
-      
       - name: 上传分析报告
         uses: actions/upload-artifact@v6
         if: always()
