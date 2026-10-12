@@ -545,52 +545,6 @@ jobs:
           else
             python main.py $FORCE_RUN_ARG
           fi
-      - name: 免费推送报告至 QQ 官方机器人
-        if: success()
-        env:
-          QQ_APPID: ${{ secrets.QQ_BOT_APPID }}
-          QQ_SECRET: ${{ secrets.QQ_BOT_SECRET }}
-          QQ_TARGET: ${{ secrets.QQ_TARGET_ID }}
-        run: |
-          echo "正在获取 QQ 官方 AccessToken..."
-          TOKEN_RES=$(curl -s -X POST "https://bots.qq.com/app/getAppAccessToken" \
-            -H "Content-Type: application/json" \
-            -d "{\"appId\":\"$QQ_APPID\",\"clientSecret\":\"$QQ_SECRET\"}")
-          
-          ACCESS_TOKEN=$(echo "$TOKEN_RES" | jq -r '.access_token // empty')
-          if [ -z "$ACCESS_TOKEN" ]; then
-            echo "❌ 错误：无法获取 QQ AccessToken"
-            exit 1
-          fi
-          echo "正在提取最新报告并构建直链..."
-          REPORT_PATH=$(ls -t reports/*.md 2>/dev/null | head -n 1)
-          
-          if [ -z "$REPORT_PATH" ]; then
-            REPORT_CONTENT="📈 今日自选股分析已完成！具体报告请前往 GitHub 仓库查看。"
-          else
-            # 构建 GitHub 原生 Markdown 网页预览直链
-            REPORT_URL="https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/${REPORT_PATH}"
-            
-            # 截取前 200 字符作为核心速览，后接在线直链
-            REPORT_SUMMARY=$(head -c 200 "$REPORT_PATH" | tr -d '\r')
-            
-            REPORT_CONTENT="📈 今日自选股分析已完成！
-                【核心速览】
-                ${REPORT_SUMMARY}...
-                🔗 完整研报在线查看：
-                ${REPORT_URL}"
-                fi
-                echo "正在通过 OpenAPI 推送至 QQ 群..."
-                SEND_RES=$(curl -s -X POST "https://api.sgroup.qq.com/v2/groups/${QQ_TARGET}/messages" \
-                -H "Authorization: QQBot $ACCESS_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "$(jq -n --arg content "$REPORT_CONTENT" '{content: $content, msg_type: 0}')")
-                ERR_CODE=$(echo "$SEND_RES" | jq -r '.code // empty')
-                if [ -n "$ERR_CODE" ] && [ "$ERR_CODE" != "0" ]; then
-                echo "❌ 推送失败: $SEND_RES"
-                exit 1
-                fi
-                echo "✅ QQ 机器人推送成功！"
       - name: 上传分析报告
         uses: actions/upload-artifact@v6
         if: always()
