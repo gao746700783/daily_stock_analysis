@@ -566,12 +566,18 @@ jobs:
           fi
           echo "正在提取今日生成的股票分析报告..."
           # 2. 捞取项目在 reports/ 目录下生成的最新文本/Markdown 报告
-          REPORT_PATH=$(ls -t reports/*.txt 2>/dev/null | head -n 1)
+          REPORT_PATH=$(ls -t reports/*.md reports/*.txt 2>/dev/null | head -n 1)
           if [ -z "$REPORT_PATH" ]; then
             REPORT_CONTENT="📈 今日自选股分析已跑完！具体详情请登录 GitHub 仓库查看导出的 artifact 看板。"
           else
-            # QQ官方接口单条消息硬性限制1024字符，截取前900个字符防止溢出
-            REPORT_CONTENT=$(head -c 900 "$REPORT_PATH")
+            echo "📄 命中最新报告文件: $REPORT_PATH"
+            # QQ官方接口纯文本单条限制1024字符，截取前850字符并附加提示
+            CONTENT_RAW=$(cat "$REPORT_PATH")
+            if [ ${#CONTENT_RAW} -gt 850 ]; then
+              REPORT_CONTENT="$(head -c 850 "$REPORT_PATH")... (内容过长，完整报告请在 GitHub Artifacts 中下载查看)"
+            else
+              REPORT_CONTENT="$CONTENT_RAW"
+            fi
           fi
           echo "正在通过 OpenAPI 推送至 QQ 群..."
           # 3. 使用安全的方式包装 JSON 并调用接口
