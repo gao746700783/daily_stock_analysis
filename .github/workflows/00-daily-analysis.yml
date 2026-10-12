@@ -554,7 +554,7 @@ jobs:
         run: |
           echo "正在获取 QQ 官方 AccessToken..."
           # 1. 向腾讯服务器用 AppID 和 Secret 换取临时 Token
-          TOKEN_RES=$(curl -s -X POST "https://qq.com" \
+          TOKEN_RES=$(curl -s -X POST "https://api.bot.qq.com/app/getAppAccessToken" \
             -H "Content-Type: application/json" \
             -d "{\"appId\":\"$QQ_APPID\",\"clientSecret\":\"$QQ_SECRET\"}")
           
@@ -575,7 +575,7 @@ jobs:
           fi
           echo "正在通过 OpenAPI 推送至 QQ 群..."
           # 3. 使用安全的方式包装 JSON 并调用接口
-          curl -X POST "https://qq.com" \
+          curl -X POST "https://api.bot.qq.com/v2/groups/$QQ_TARGET/messages" \
             -H "Authorization: QQBot $ACCESS_TOKEN" \
             -H "X-Union-Appid: $QQ_APPID" \
             -H "Content-Type: application/json" \
